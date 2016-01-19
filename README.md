@@ -10,7 +10,7 @@ Log into Amazon using the following base snippet. Store data in session which yo
 import requests
 
 session = requests.Session()
-data = {'email':'sudipta.genius@gmail.com', 'password':'password'}
+data = {'email':'email_id@gmail.com', 'password':'password'}
 header={'User-Agent' : 'Mozilla/5.0'}
 
 response = session.post('https://www.amazon.com/gp/sign-in.html', data, headers=header)
