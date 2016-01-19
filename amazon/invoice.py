@@ -105,6 +105,19 @@ def get_existing_orders():
     return existing
 
 
+def extract_unix_time(html):
+    order_date_str = html.find('span', text=re.compile(r'[\s]*Order placed[\s]*'), attrs={'class': 'a-color-secondary label'}).parent.parent.parent.find('span', attrs={'class': 'a-color-secondary value'}).text.strip()
+    # order_date_str = """January 7, 2016"""
+    reg = re.compile(r'[\s]*([A-z]+)[\s]*([0-9]+)[,\s]+([0-9]{4})')
+    dat = re.match(reg, order_date_str)
+    # print(dat.group(0))
+    print(dat.group(1))
+    print(dat.group(2))
+    print(dat.group(3))
+
+    return "0"
+
+
 def extract_orders(html):
     """
     Extracts all order details from the passed html page and returns a list of the newly found order objects
@@ -114,12 +127,13 @@ def extract_orders(html):
 
     for item in html.findAll("div", {"class": "a-box-group a-spacing-base order"}):
         order_no = item.find("div", {"class": "a-fixed-right-grid-col actions a-col-right"}).find("span", {"class": "a-color-secondary value"})
-
         invoice_link = item.find('a', text="Invoice", attrs={'class': 'a-link-normal'}, href=True).parent["href"]
+        order_date = extract_unix_time(item)
         link = urljoin(base, invoice_link)
         orders.append({
             "id": str(order_no.text),
             "url": str(link),
+            "date": str(order_date),
             "done": 0
         })
     return orders
@@ -297,4 +311,8 @@ class TestAmazon(unittest.TestCase):
         self.br = None
 
 if __name__ == '__main__':
-    unittest.main()
+    # unittest.main()
+    browser = get_browser()
+    browser, html = get_recent_orders_dummy(browser)
+    for o in extract_orders(html):
+        print(o, "\n\n")

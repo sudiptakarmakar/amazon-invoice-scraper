@@ -58,3 +58,5 @@ target/
 
 # Custom
 aux/
+*.pdf
+amazon/static/assets/db/
