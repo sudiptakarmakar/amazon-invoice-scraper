@@ -12,3 +12,9 @@ def index():
 @app.errorhandler(404)
 def page_not_found(e):
     return flask.render_template('404.html'), 404
+
+
+@app.route('/<key>', methods=["GET", "POST"])
+def search_shelves(key=None):
+    data = flask.request.data
+    return flask.jsonify(products=data)

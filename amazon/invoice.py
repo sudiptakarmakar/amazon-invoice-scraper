@@ -125,28 +125,38 @@ def extract_orders(html):
     return orders
 
 
-def remove_duplicats(fresh, existing):
+def remove_duplicates(fresh, existing):
+    """
+    Checks the order ids from existing orders and returns only new ones
+    from fresh after removing the duplicates
+    """
     return list([order for order in fresh if order.get("id") and not existing.get(order.get("id"), None)])
 
 
 def get_new_orders(order_count, html, existing_orders, browser):
     """
-    Handles pagination in order details page. Replicates ideal urls for different page navigation and fetches all new orders (the ones that haven't been processed already)"""
+    Handles pagination in order details page. Replicates ideal urls
+    for different page navigation and fetches all new orders
+    (the ones that haven't been processed already)
+    """
     # order_count = 10  # don't forget to remove this line
     new_orders = []
     fresh_orders = extract_orders(html)
-    new_orders.extend(remove_duplicats(fresh_orders, existing_orders))
+    new_orders.extend(remove_duplicates(fresh_orders, existing_orders))
 
     for page, start_index in enumerate(range(10, order_count, 10)):
         browser, html = get_specific_order_page(browser, page+1, page+2, start_index)
         with open("page{}_{}.html".format(page+1, page+2), "wb") as filez:
             filez.write(html.prettify())
         fresh_orders = extract_orders(html)
-        new_orders.extend(remove_duplicats(fresh_orders, existing_orders))
+        new_orders.extend(remove_duplicates(fresh_orders, existing_orders))
     return browser, new_orders
 
 
 def print_pdf(order, browser):
+    """
+    Fetches invoice url from order object and prints out the invoice
+    """
     order_id = order["id"]
     save_location = "./static/assets/pdf/"
     if not os.path.exists(save_location):
@@ -166,6 +176,9 @@ def print_pdf(order, browser):
 
 
 def generate_new_invoices(orders, browser):
+    """
+    Generates invoices for all the orders and marks the successful ones as done
+    """
     for order in orders:
         if print_pdf(order, browser):
             order["done"] = 1
@@ -173,6 +186,9 @@ def generate_new_invoices(orders, browser):
 
 
 def get_database_connection(dbname):
+    """
+    Connects to sqlite database and returns a connection instance
+    """
     db_location = "./static/assets/db/"
     if not os.path.exists(db_location):
         os.makedirs(db_location)
@@ -189,6 +205,9 @@ def get_database_connection(dbname):
 
 
 def save_new_orders(orders):
+    """
+    All the new orders are saved. The ones that already exists are updated
+    """
     conn = get_database_connection('AmazonInvoices.db')
     cur = conn.cursor()
     saved = 0
@@ -212,7 +231,6 @@ def generate(auth):
     main controller
     """
     browser = get_browser()
-    # print("1. Browser initialized\n\n")
     browser, sign_in_failed = sign_in(browser, auth)
     if sign_in_failed:
         return {
@@ -221,9 +239,7 @@ def generate(auth):
             "description": "Sign in failed"
         }
     browser, html = get_recent_orders(browser)
-    # print("2. Dummy recent order fetched\n\n")
     order_count = find_order_count(html)
-    # print("3. Order content counted: {}\n\n".format(order_count))
     if not order_count:
         return {
             "success": True,
@@ -231,13 +247,9 @@ def generate(auth):
             "description": "No new order found"
         }
     existing_orders = get_existing_orders()
-    # print("4. Existing orders fetched: {}\n\n".format(len(existing_orders)))
     browser, new_orders = get_new_orders(order_count, html, existing_orders, browser)
-    # print("5. New orders fetched: {}\n\n".format(len(new_orders)))
     new_orders = generate_new_invoices(new_orders, browser)
-    # print("6. Invoice generated for new orders\n\n")
     saved = save_new_orders(new_orders)
-    # print("7. New orders are saved in database\n\n")
     return {
         "success": True,
         "added": saved,
@@ -261,7 +273,7 @@ class TestAmazon(unittest.TestCase):
     def test_something(self):
         self.br, html = get_recent_orders_dummy(self.br)
 
-    def test_remove_duplicats(self):
+    def test_remove_duplicates(self):
         existing = {"123": True, "234": True, "345": True, "456": True}
         fresh = [{"id": "012", "val": 120},
                  {"id": "123", "val": 123},
@@ -273,7 +285,7 @@ class TestAmazon(unittest.TestCase):
                  {"id": "789", "val": 789},
                  {"id": "890", "val": 890}]
 
-        new = remove_duplicats(fresh, existing)
+        new = remove_duplicates(fresh, existing)
 
         self.assertEqual(new, ideal)
         self.assertTrue(len(fresh) >= len(new))
