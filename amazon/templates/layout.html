@@ -1,0 +1,20 @@
+<!DOCTYPE html>
+<html lang="en" ng-app='amazon'>
+    <head>
+        <% include "meta.html" %>
+        <title>%% title %%</title>
+        <% include "pre_scripts.html" %>
+        <% include "stylesheets.html" %>
+        <% include "ie_compatibility.html" %>
+    </head>
+    <body>
+        <% include "navbar.html" %>
+        <!-- Begin page content -->
+        <div class="container">
+            <% block body %>
+            <% endblock %>
+        </div>
+        <% include "footer.html" %>
+        <% include "scripts.html" %>
+    </body>
+</html>
