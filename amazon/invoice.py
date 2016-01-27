@@ -110,19 +110,20 @@ def get_existing_orders():
 
 def extract_unix_time(html):
     months = {}
-    # order_date_str = html.find('span', text=re.compile(r'[\s]*Order placed[\s]*'), attrs={'class': 'a-color-secondary label'}).parent.parent.parent.find('span', attrs={'class': 'a-color-secondary value'}).text.strip()
-    order_date_str = """January 7, 2016"""
+    order_date_str = html.find('span', text=re.compile(r'[\s]*Order placed[\s]*'), attrs={'class': 'a-color-secondary label'}).parent.parent.parent.find('span', attrs={'class': 'a-color-secondary value'}).text.strip()
+    # order_date_str = """January 7, 2016"""
     try:
         order_date = datetime.datetime.strptime(order_date_str, '%B %d, %Y')
         return order_date
     except ValueError as e:
-        if "does not match format" in str(e):
-            reg = re.compile(r'[\s]*([A-z]+)[\s]*([0-9]+)[,\s]+([0-9]{4})')
-            dt = re.match(reg, order_date_str)
-            m = dt.group(1)
-            d = dt.group(2)
-            y = dt.group(3)
-            order_date = datetime.datetime(y, m, d)
+        # if "does not match format" in str(e):
+        #     reg = re.compile(r'[\s]*([A-z]+)[\s]*([0-9]+)[,\s]+([0-9]{4})')
+        #     dt = re.match(reg, order_date_str)
+        #     m = dt.group(1)
+        #     d = dt.group(2)
+        #     y = dt.group(3)
+        #     order_date = datetime.datetime(y, m, d)
+        raise e
     return None
 
 
@@ -139,9 +140,7 @@ def extract_orders(html, timeframe):
 
     for item in html.findAll("div", {"class": "a-box-group a-spacing-base order"}):
         order_date = extract_unix_time(item)
-        if order_date is None:
-            continue
-        if not_in_timeframe(order_date, timeframe):
+        if (order_date is None) or not_in_timeframe(order_date, timeframe):
             continue
         order_no = item.find("div", {"class": "a-fixed-right-grid-col actions a-col-right"}).find("span", {"class": "a-color-secondary value"})
         invoice_link = item.find('a', text="Invoice", attrs={'class': 'a-link-normal'}, href=True).parent["href"]
