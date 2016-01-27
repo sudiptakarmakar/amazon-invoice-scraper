@@ -6,6 +6,9 @@ from requests.compat import urljoin
 import pdfkit
 import sqlite3 as sql
 import re
+import time
+import datetime
+import click
 
 import unittest
 
@@ -106,19 +109,28 @@ def get_existing_orders():
 
 
 def extract_unix_time(html):
-    order_date_str = html.find('span', text=re.compile(r'[\s]*Order placed[\s]*'), attrs={'class': 'a-color-secondary label'}).parent.parent.parent.find('span', attrs={'class': 'a-color-secondary value'}).text.strip()
-    # order_date_str = """January 7, 2016"""
-    reg = re.compile(r'[\s]*([A-z]+)[\s]*([0-9]+)[,\s]+([0-9]{4})')
-    dat = re.match(reg, order_date_str)
-    # print(dat.group(0))
-    print(dat.group(1))
-    print(dat.group(2))
-    print(dat.group(3))
+    months = {}
+    # order_date_str = html.find('span', text=re.compile(r'[\s]*Order placed[\s]*'), attrs={'class': 'a-color-secondary label'}).parent.parent.parent.find('span', attrs={'class': 'a-color-secondary value'}).text.strip()
+    order_date_str = """January 7, 2016"""
+    try:
+        order_date = datetime.datetime.strptime(order_date_str, '%B %d, %Y')
+        return order_date
+    except ValueError as e:
+        if "does not match format" in str(e):
+            reg = re.compile(r'[\s]*([A-z]+)[\s]*([0-9]+)[,\s]+([0-9]{4})')
+            dt = re.match(reg, order_date_str)
+            m = dt.group(1)
+            d = dt.group(2)
+            y = dt.group(3)
+            order_date = datetime.datetime(y, m, d)
+    return None
 
-    return "0"
+
+def not_in_timeframe(order_date, tf):
+    return order_date > tf["start"] or order_date < tf["end"]
 
 
-def extract_orders(html):
+def extract_orders(html, timeframe):
     """
     Extracts all order details from the passed html page and returns a list of the newly found order objects
     """
@@ -126,9 +138,13 @@ def extract_orders(html):
     base = "https://www.amazon.com"
 
     for item in html.findAll("div", {"class": "a-box-group a-spacing-base order"}):
+        order_date = extract_unix_time(item)
+        if order_date is None:
+            continue
+        if not_in_timeframe(order_date, timeframe):
+            continue
         order_no = item.find("div", {"class": "a-fixed-right-grid-col actions a-col-right"}).find("span", {"class": "a-color-secondary value"})
         invoice_link = item.find('a', text="Invoice", attrs={'class': 'a-link-normal'}, href=True).parent["href"]
-        order_date = extract_unix_time(item)
         link = urljoin(base, invoice_link)
         orders.append({
             "id": str(order_no.text),
@@ -147,7 +163,7 @@ def remove_duplicates(fresh, existing):
     return list([order for order in fresh if order.get("id") and not existing.get(order.get("id"), None)])
 
 
-def get_new_orders(order_count, html, existing_orders, browser):
+def get_new_orders(order_count, html, timeframe, existing_orders, browser):
     """
     Handles pagination in order details page. Replicates ideal urls
     for different page navigation and fetches all new orders
@@ -155,14 +171,14 @@ def get_new_orders(order_count, html, existing_orders, browser):
     """
     # order_count = 10  # don't forget to remove this line
     new_orders = []
-    fresh_orders = extract_orders(html)
+    fresh_orders = extract_orders(html, timeframe)
     new_orders.extend(remove_duplicates(fresh_orders, existing_orders))
 
     for page, start_index in enumerate(range(10, order_count, 10)):
         browser, html = get_specific_order_page(browser, page+1, page+2, start_index)
-        with open("page{}_{}.html".format(page+1, page+2), "wb") as filez:
-            filez.write(html.prettify())
-        fresh_orders = extract_orders(html)
+        # with open("page{}_{}.html".format(page+1, page+2), "wb") as filez:
+        #     filez.write(html.prettify())
+        fresh_orders = extract_orders(html, timeframe)
         new_orders.extend(remove_duplicates(fresh_orders, existing_orders))
     return browser, new_orders
 
@@ -240,10 +256,17 @@ def save_new_orders(orders):
     return saved
 
 
-def generate(auth):
+def generate(auth, timeframe):
     """
     main controller
     """
+    # print("Auth:", auth, "Time range:", timeframe)
+    # print(timeframe["start"] - timeframe["end"])
+    return {
+        "success": True,
+        "added": 0,
+        "description": "Working as expected"
+    }
     browser = get_browser()
     browser, sign_in_failed = sign_in(browser, auth)
     if sign_in_failed:
@@ -261,7 +284,7 @@ def generate(auth):
             "description": "No new order found"
         }
     existing_orders = get_existing_orders()
-    browser, new_orders = get_new_orders(order_count, html, existing_orders, browser)
+    browser, new_orders = get_new_orders(order_count, html, timeframe, existing_orders, browser)
     new_orders = generate_new_invoices(new_orders, browser)
     saved = save_new_orders(new_orders)
     return {
@@ -269,6 +292,29 @@ def generate(auth):
         "added": saved,
         "description": "New invoices added successfully"
     }
+
+
+@click.command()
+@click.option('--username', '-u', prompt='Amazon username', help='Amazon account username you want to use')
+@click.option('--password', '-p', prompt='Amazon password', confirmation_prompt=True, hide_input=True, help='Password of the amazon account you are using')
+@click.option('--start', '-s', help='Start date of date range (m/d/yyyy)')
+@click.option('--end', '-e', help='End date of date range (m/d/yyyy)')
+def cli(username, password, start, end):
+    auth = {"username": username, "password": password}
+    if not bool(start):
+        start = datetime.datetime.now()
+    else:
+        m, d, y = (int(i) for i in re.split('\.|\/|-', start))
+        start = datetime.datetime(y, m, d)
+    if not bool(end):
+        end = datetime.datetime.now() - datetime.timedelta(days=180)
+    else:
+        m, d, y = (int(i) for i in re.split('\.|\/|-', end))
+        end = datetime.datetime(y, m, d)
+    timeframe = {"start": start, "end": end}
+    if(start < end):
+        timeframe = {"start": end, "end": start}
+    click.echo(str(generate(auth, timeframe)))
 
 
 class TestAmazon(unittest.TestCase):
@@ -312,7 +358,4 @@ class TestAmazon(unittest.TestCase):
 
 if __name__ == '__main__':
     # unittest.main()
-    browser = get_browser()
-    browser, html = get_recent_orders_dummy(browser)
-    for o in extract_orders(html):
-        print(o, "\n\n")
+    cli()
