@@ -63,3 +63,4 @@ target/
 aux/
 *.pdf
 amazon/static/assets/db/
+venv/
